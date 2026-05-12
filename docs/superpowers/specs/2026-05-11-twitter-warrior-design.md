@@ -1,4 +1,4 @@
-# Twitter Warrior — Design Spec
+# Feed Warrior — Design Spec
 
 **Date:** 2026-05-11
 **Owner:** Sidharth Srinivasan (`@sidharths00`)
@@ -38,7 +38,7 @@ A daily email (~7am PT) containing:
   - One-line "why this is interesting" rationale
 - 2-3 **longer post angles** at the bottom — themes pulled from the day's tweets that could become threads or longer posts (not pre-drafted in full, just the angle).
 
-Plus an on-demand CLI (`twitter-warrior digest`) that runs the same pipeline at any time.
+Plus an on-demand CLI (`feed-warrior digest`) that runs the same pipeline at any time.
 
 ## Stack
 
@@ -183,21 +183,21 @@ Footer: 2-3 longer-post angles, plain text.
 
 ## Bootstrap (one-time setup)
 
-1. **Voice corpus:** `twitter-warrior bootstrap-corpus` → Apify scrapes last ~500 tweets from `@sidharths00`, populates `voice_samples`.
+1. **Voice corpus:** `feed-warrior bootstrap-corpus` → Apify scrapes last ~500 tweets from `@sidharths00`, populates `voice_samples`.
 2. **Curated accounts:**
-   - `twitter-warrior bootstrap-accounts` → Apify scrapes who `@sidharths00` follows.
+   - `feed-warrior bootstrap-accounts` → Apify scrapes who `@sidharths00` follows.
    - For each followed account, Apify also pulls bio + last 5 tweets.
    - LLM classifies each as `ai_relevant: yes/no/maybe` with a one-line reason. Cost: ~$1-3.
    - Output written to `accounts_seed.md` for manual pruning.
-   - `twitter-warrior load-accounts <file>` ingests the approved list into `accounts`.
+   - `feed-warrior load-accounts <file>` ingests the approved list into `accounts`.
 
 ## Repo layout
 
 ```
-twitter-warrior/
+feed-warrior/
 ├── api/
 │   └── digest.py                    # Vercel function entry
-├── src/twitter_warrior/
+├── src/feed_warrior/
 │   ├── __init__.py
 │   ├── apify_client.py
 │   ├── store.py
