@@ -65,9 +65,11 @@ def bootstrap_accounts(out: str):
     for i in range(0, len(follows), BATCH):
         batch = follows[i : i + BATCH]
         payload = [
-            {"handle": f.get("userName", ""), "name": f.get("name", ""),
-             "bio": (f.get("description") or "")[:200], "followers": f.get("followersCount", 0)}
-            for f in batch if f.get("userName")
+            {"handle": f.get("screen_name") or f.get("userName") or "",
+             "name": f.get("name", ""),
+             "bio": (f.get("description") or "")[:200],
+             "followers": f.get("followers_count") or f.get("followersCount") or 0}
+            for f in batch if (f.get("screen_name") or f.get("userName"))
         ]
         if not payload:
             continue

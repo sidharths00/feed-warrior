@@ -7,7 +7,7 @@ from apify_client import ApifyClient as ApifySDK
 from .store import Tweet, VoiceSample
 
 DEFAULT_TWEET_ACTOR = "apidojo/tweet-scraper"
-DEFAULT_FOLLOWS_ACTOR = "apidojo/twitter-following-scraper"
+DEFAULT_FOLLOWS_ACTOR = "igview-owner/twitter-x-following-scraper"
 
 
 class ApifyClient:
@@ -65,7 +65,7 @@ class ApifyClient:
         return out
 
     def fetch_follows(self, handle: str, max_items: int = 2000) -> list[dict]:
-        run_input = {"user_names": [handle], "maxItems": max_items}
+        run_input = {"usernames": [handle], "max_following_per_user": max_items}
         run = self._client.actor(self.actor_id_follows).call(run_input=run_input)
         items = list(self._client.dataset(run["defaultDatasetId"]).iterate_items())
         return items
