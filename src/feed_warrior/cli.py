@@ -16,7 +16,15 @@ from .llm import LLM
 
 
 def _pool(cfg: Config) -> ConnectionPool:
-    return ConnectionPool(cfg.database_url, min_size=1, max_size=4, open=True)
+    # check=check_connection pings each connection before handing it out, so
+    # connections that Neon idle-killed during a long Apify scrape get rebuilt.
+    return ConnectionPool(
+        cfg.database_url,
+        min_size=1,
+        max_size=4,
+        open=True,
+        check=ConnectionPool.check_connection,
+    )
 
 
 @click.group()
