@@ -90,8 +90,13 @@ def _parse_dt(s: Any) -> datetime | None:
         return None
     if isinstance(s, datetime):
         return s if s.tzinfo else s.replace(tzinfo=timezone.utc)
+    s = str(s)
     try:
-        s = str(s).replace("Z", "+00:00")
-        return datetime.fromisoformat(s)
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        pass
+    try:
+        # Twitter API format e.g. "Tue May 12 18:31:09 +0000 2026"
+        return datetime.strptime(s, "%a %b %d %H:%M:%S %z %Y")
     except ValueError:
         return None

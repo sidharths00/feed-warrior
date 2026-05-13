@@ -29,6 +29,20 @@ def test_parse_tweets_from_actor_output():
     assert out[0].source == "list"
 
 
+def test_parse_tweets_handles_twitter_date_format():
+    """Apify's apidojo/tweet-scraper returns Twitter-format dates, not ISO8601."""
+    raw = [{
+        "id": "111",
+        "author": {"userName": "karpathy"},
+        "text": "hello",
+        "url": "https://x.com/karpathy/status/111",
+        "createdAt": "Tue May 12 18:31:09 +0000 2026",
+    }]
+    out = ApifyClient._parse_tweets(raw, source="list")
+    assert len(out) == 1
+    assert out[0].posted_at == datetime(2026, 5, 12, 18, 31, 9, tzinfo=timezone.utc)
+
+
 def test_fetch_account_tweets_calls_actor_with_handles():
     apify = MagicMock()
     actor = MagicMock()
