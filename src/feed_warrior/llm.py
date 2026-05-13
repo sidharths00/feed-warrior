@@ -3,13 +3,27 @@ import json
 import re
 import time
 from typing import Any
-from anthropic import Anthropic
+from anthropic import (
+    Anthropic,
+    APIConnectionError,
+    APITimeoutError,
+    InternalServerError,
+    RateLimitError,
+)
 
 MAX_RETRIES = 3
 BACKOFF_BASE = 1.0
-DEFAULT_MODEL = "claude-sonnet-4-5-20250929"  # Sonnet 4.6 alias when available
+DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
+
+RETRIABLE_EXCEPTIONS = (
+    APIConnectionError,
+    APITimeoutError,
+    RateLimitError,
+    InternalServerError,
+)
 
 _FENCE_RE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.DOTALL)
+_BALANCED_RE = re.compile(r"(\{.*\}|\[.*\])", re.DOTALL)
 
 
 class LLM:
@@ -28,15 +42,21 @@ class LLM:
                     messages=[{"role": "user", "content": user}],
                 )
                 return resp.content[0].text
-            except Exception as e:
+            except RETRIABLE_EXCEPTIONS as e:
                 last_exc = e
                 if attempt < MAX_RETRIES - 1:
                     time.sleep(BACKOFF_BASE * (2 ** attempt))
         raise RuntimeError(f"LLM call failed after {MAX_RETRIES} attempts: {last_exc}")
 
     def complete_json(self, system: str, user: str, max_tokens: int = 2048) -> Any:
-        text = self.complete_text(system=system, user=user, max_tokens=max_tokens)
-        m = _FENCE_RE.match(text.strip())
+        text = self.complete_text(system=system, user=user, max_tokens=max_tokens).strip()
+        m = _FENCE_RE.match(text)
         if m:
-            text = m.group(1)
-        return json.loads(text)
+            text = m.group(1).strip()
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            balanced = _BALANCED_RE.search(text)
+            if balanced:
+                return json.loads(balanced.group(1))
+            raise
