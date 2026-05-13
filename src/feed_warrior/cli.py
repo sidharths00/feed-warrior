@@ -146,8 +146,9 @@ def digest(dry_run: bool):
     inserted = store.upsert_tweets(new_tweets)
     click.echo(f"upserted {inserted} new tweets (saw {len(new_tweets)})")
 
-    candidates = store.get_recent_tweets(since=since)
-    click.echo(f"scoring {len(candidates)} candidates")
+    MAX_CANDIDATES = 200
+    candidates = store.get_recent_tweets(since=since)[:MAX_CANDIDATES]
+    click.echo(f"scoring {len(candidates)} candidates (capped at {MAX_CANDIDATES})")
     filt = Filter(llm=llm)
     scored = filt.score_tweets(candidates)
     chosen = filt.select(scored, weights=cfg.bucket_weights, total=cfg.daily_slots)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 import math
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -7,6 +8,7 @@ from .llm import LLM
 from .store import Tweet
 
 BUCKETS = ("signal", "work_adjacent", "discourse")
+SCORE_CONCURRENCY = 8
 
 SCORING_SYSTEM = """\
 You score tweets for an AI content engine. The reader is a Stanford-grad founder
@@ -41,26 +43,35 @@ class Filter:
     def score_tweets(self, tweets: list[Tweet]) -> list[ScoredTweet]:
         if not tweets:
             return []
+        batches = [tweets[i : i + self.batch_size] for i in range(0, len(tweets), self.batch_size)]
         out: list[ScoredTweet] = []
-        for i in range(0, len(tweets), self.batch_size):
-            batch = tweets[i : i + self.batch_size]
-            payload = [{"id": t.id, "author": t.author_handle, "text": t.text} for t in batch]
-            user = "Score these tweets:\n\n" + _format_batch(payload)
-            max_tokens = max(2048, len(batch) * 120)
-            scores = self.llm.complete_json(system=SCORING_SYSTEM, user=user, max_tokens=max_tokens)
-            if not isinstance(scores, list):
-                continue
-            by_id = {s["id"]: s for s in scores if isinstance(s, dict) and "id" in s}
-            for t in batch:
-                s = by_id.get(t.id)
-                if not s:
-                    continue
-                out.append(ScoredTweet(
-                    tweet=t,
-                    scores={k: int(s.get(k, 0)) for k in BUCKETS},
-                    reason=s.get("reason", ""),
-                ))
+        with ThreadPoolExecutor(max_workers=SCORE_CONCURRENCY) as pool:
+            for batch_result in pool.map(self._score_batch, batches):
+                out.extend(batch_result)
         return out
+
+    def _score_batch(self, batch: list[Tweet]) -> list[ScoredTweet]:
+        payload = [{"id": t.id, "author": t.author_handle, "text": t.text} for t in batch]
+        user = "Score these tweets:\n\n" + _format_batch(payload)
+        max_tokens = max(2048, len(batch) * 120)
+        try:
+            scores = self.llm.complete_json(system=SCORING_SYSTEM, user=user, max_tokens=max_tokens)
+        except Exception:
+            return []
+        if not isinstance(scores, list):
+            return []
+        by_id = {s["id"]: s for s in scores if isinstance(s, dict) and "id" in s}
+        result: list[ScoredTweet] = []
+        for t in batch:
+            s = by_id.get(t.id)
+            if not s:
+                continue
+            result.append(ScoredTweet(
+                tweet=t,
+                scores={k: int(s.get(k, 0)) for k in BUCKETS},
+                reason=s.get("reason", ""),
+            ))
+        return result
 
     def select(self, scored: list[ScoredTweet], weights: dict[str, float], total: int) -> list[ScoredTweet]:
         counts = self._allocate_slots(weights, total)
