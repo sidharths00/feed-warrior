@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Feed Warrior — {{ date_str }}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #111; max-width: 640px; margin: 0 auto; padding: 16px; line-height: 1.45; }
+    h1 { font-size: 18px; margin: 0 0 16px 0; }
+    .item { border: 1px solid #e5e5e5; border-radius: 12px; padding: 14px 16px; margin: 12px 0; }
+    .src { color: #555; font-size: 14px; margin-bottom: 6px; }
+    .src .author { font-weight: 600; color: #000; }
+    .source-text { background: #fafafa; border-left: 3px solid #ddd; padding: 8px 10px; font-size: 14px; margin: 6px 0; }
+    .draft { font-size: 16px; margin: 10px 0 4px 0; }
+    .why { font-size: 12px; color: #666; margin-top: 6px; }
+    .actions a { display: inline-block; margin-right: 12px; font-size: 13px; }
+    .post { background: #1d9bf0; color: #fff; padding: 6px 12px; border-radius: 999px; text-decoration: none; }
+    .source-link { color: #1d9bf0; text-decoration: none; }
+    .angles { margin-top: 28px; padding-top: 16px; border-top: 2px solid #eee; }
+    .angle { background: #fff8e6; padding: 12px 14px; border-radius: 8px; margin: 8px 0; font-size: 14px; }
+    .empty { color: #888; padding: 20px; text-align: center; }
+    .footer { color: #888; font-size: 11px; margin-top: 32px; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>Feed Warrior — {{ date_str }} ({{ drafts|length }} drafts)</h1>
+
+  {% if not drafts %}
+    <div class="empty">no drafts today (nothing crossed the bar)</div>
+  {% endif %}
+
+  {% for d in drafts %}
+  <div class="item">
+    <div class="src">
+      <span class="author">@{{ d.scored.tweet.author_handle }}</span>
+      <a class="source-link" href="{{ d.scored.tweet.url }}">→ view on X</a>
+    </div>
+    <div class="source-text">{{ d.scored.tweet.text }}</div>
+    <div class="draft">{{ d.draft_text }}</div>
+    <div class="actions">
+      <a class="post" href="{{ intent_link(d.draft_text if d.mode == 'reply' else d.draft_text + ' ' + d.scored.tweet.url) }}">post this</a>
+      <a class="source-link" href="{{ d.scored.tweet.url }}">reply natively</a>
+    </div>
+    <div class="why">why interesting: {{ d.why_interesting }}</div>
+  </div>
+  {% endfor %}
+
+  {% if angles %}
+  <div class="angles">
+    <h2 style="font-size: 15px;">longer angles</h2>
+    {% for a in angles %}
+    <div class="angle">{{ a }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="footer">feed-warrior · {{ date_str }}</div>
+</body>
+</html>
