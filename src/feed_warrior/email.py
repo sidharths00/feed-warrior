@@ -4,14 +4,14 @@ from typing import Any
 from urllib.parse import quote
 
 import resend
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2 import Environment, FileSystemLoader
 
 from .drafter import Draft
 
 _TEMPLATES_DIR = Path(__file__).resolve().parents[2] / "templates"
 _env = Environment(
     loader=FileSystemLoader(str(_TEMPLATES_DIR)),
-    autoescape=select_autoescape(["html"]),
+    autoescape=True,
 )
 
 

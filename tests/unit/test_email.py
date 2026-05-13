@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 import urllib.parse
 from feed_warrior.email import EmailSender, render_digest_html, intent_link
 from feed_warrior.drafter import Draft
@@ -7,8 +7,8 @@ from feed_warrior.filter import ScoredTweet
 from feed_warrior.store import Tweet
 
 
-def _draft(text: str = "my take") -> Draft:
-    t = Tweet(id="1", author_handle="karpathy", text="original", url="https://x.com/karpathy/status/1",
+def _draft(text: str = "my take", source_text: str = "original") -> Draft:
+    t = Tweet(id="1", author_handle="karpathy", text=source_text, url="https://x.com/karpathy/status/1",
               posted_at=datetime(2026, 5, 11, tzinfo=timezone.utc), source="list")
     s = ScoredTweet(tweet=t, scores={"signal": 8, "work_adjacent": 2, "discourse": 1}, reason="novel")
     return Draft(scored=s, draft_text=text, why_interesting="why", mode="reply")
@@ -32,6 +32,21 @@ def test_render_digest_html_includes_drafts_and_links():
 def test_render_handles_empty_drafts_gracefully():
     html = render_digest_html(drafts=[], angles=[], date_str="2026-05-11")
     assert "no drafts" in html.lower() or "0 drafts" in html.lower()
+
+
+def test_render_escapes_user_controlled_html():
+    """Tweet text from Apify is user-controlled — must be HTML-escaped."""
+    html = render_digest_html(
+        drafts=[_draft(text="<script>alert('x')</script>", source_text="<img onerror=alert(1) src=x>")],
+        angles=["<b>not bold</b>"],
+        date_str="2026-05-11",
+    )
+    assert "<script>alert" not in html
+    assert "&lt;script&gt;alert" in html
+    assert "<img onerror" not in html
+    assert "&lt;img onerror" in html
+    assert "<b>not bold</b>" not in html
+    assert "&lt;b&gt;not bold&lt;/b&gt;" in html
 
 
 def test_email_sender_calls_resend():
