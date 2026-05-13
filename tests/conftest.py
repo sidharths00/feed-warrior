@@ -2,11 +2,14 @@ import os
 import pytest
 from psycopg_pool import ConnectionPool
 
+from feed_warrior.store import Store
+
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://feed_warrior:feed_warrior@localhost:5433/feed_warrior")
 
 @pytest.fixture(scope="session")
 def db_pool():
     pool = ConnectionPool(DATABASE_URL, min_size=1, max_size=4, open=True)
+    Store(pool).migrate("migrations")
     yield pool
     pool.close()
 
