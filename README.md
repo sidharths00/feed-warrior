@@ -7,8 +7,9 @@ See `docs/superpowers/specs/2026-05-11-twitter-warrior-design.md` for the full d
 ## Setup
 
 ```bash
+cp .env.example .env   # then fill in real values
 make install
-make db-up
+make db-up             # local Postgres on :5433
 make migrate
 ```
 
