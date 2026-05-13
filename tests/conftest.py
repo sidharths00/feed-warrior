@@ -14,10 +14,11 @@ def db_pool():
     pool.close()
 
 @pytest.fixture(autouse=True)
-def clean_db(db_pool, request):
+def clean_db(request):
     if "integration" not in request.node.nodeid:
         return
-    with db_pool.connection() as conn:
+    pool = request.getfixturevalue("db_pool")
+    with pool.connection() as conn:
         with conn.cursor() as cur:
             cur.execute("TRUNCATE tweets, voice_samples, accounts, digests, digest_items, errors RESTART IDENTITY CASCADE")
         conn.commit()
