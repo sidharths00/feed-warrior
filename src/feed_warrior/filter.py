@@ -46,8 +46,11 @@ class Filter:
             batch = tweets[i : i + self.batch_size]
             payload = [{"id": t.id, "author": t.author_handle, "text": t.text} for t in batch]
             user = "Score these tweets:\n\n" + _format_batch(payload)
-            scores = self.llm.complete_json(system=SCORING_SYSTEM, user=user)
-            by_id = {s["id"]: s for s in scores}
+            max_tokens = max(2048, len(batch) * 120)
+            scores = self.llm.complete_json(system=SCORING_SYSTEM, user=user, max_tokens=max_tokens)
+            if not isinstance(scores, list):
+                continue
+            by_id = {s["id"]: s for s in scores if isinstance(s, dict) and "id" in s}
             for t in batch:
                 s = by_id.get(t.id)
                 if not s:
@@ -65,9 +68,12 @@ class Filter:
 
     @staticmethod
     def _allocate_slots(weights: dict[str, float], total: int) -> dict[str, int]:
+        # Precondition: weights sum to ~1. Config validates this; we re-check defensively.
+        if not 0.99 < sum(weights[k] for k in BUCKETS) < 1.01:
+            raise ValueError(f"weights must sum to 1, got {sum(weights[k] for k in BUCKETS)}")
         raw = {k: weights[k] * total for k in BUCKETS}
         floors = {k: int(math.floor(v)) for k, v in raw.items()}
-        remaining = total - sum(floors.values())
+        remaining = max(0, total - sum(floors.values()))
         fracs = sorted(((raw[k] - floors[k], k) for k in BUCKETS), reverse=True)
         for _, k in fracs[:remaining]:
             floors[k] += 1
