@@ -13,7 +13,7 @@ from anthropic import (
 
 MAX_RETRIES = 3
 BACKOFF_BASE = 1.0
-DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
+DEFAULT_MODEL = "claude-sonnet-4-6"
 
 RETRIABLE_EXCEPTIONS = (
     APIConnectionError,

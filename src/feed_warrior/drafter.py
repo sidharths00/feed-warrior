@@ -1,11 +1,14 @@
 from __future__ import annotations
 import random
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Literal
 
 from .filter import ScoredTweet
 from .llm import LLM
 from .store import VoiceSample
+
+DRAFT_CONCURRENCY = 5
 
 
 @dataclass
@@ -71,7 +74,10 @@ class Drafter:
         )
 
     def draft_many(self, items: list[ScoredTweet]) -> list[Draft]:
-        return [self.draft_one(it) for it in items]
+        if not items:
+            return []
+        with ThreadPoolExecutor(max_workers=DRAFT_CONCURRENCY) as pool:
+            return list(pool.map(self.draft_one, items))
 
     def angles(self, items: list[ScoredTweet]) -> list[str]:
         if not items:

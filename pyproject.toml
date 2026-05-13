@@ -12,7 +12,6 @@ dependencies = [
     "resend>=2.4",
     "apify-client>=1.8",
     "python-dotenv>=1.0",
-    "pydantic>=2.9",
 ]
 
 [project.optional-dependencies]
