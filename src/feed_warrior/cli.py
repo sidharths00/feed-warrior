@@ -133,40 +133,57 @@ def load_accounts(path: str):
     click.echo(f"loaded {inserted} accounts ({len(handles)} parsed)")
 
 
+MAX_ACCOUNTS = 50
+MAX_PER_HANDLE = 5
+MAX_CANDIDATES = 100
+
+
+def _with_store(cfg: Config, fn):
+    """Run fn(store) with a fresh, short-lived pool. Avoids stale-connection issues."""
+    pool = _pool(cfg)
+    try:
+        return fn(Store(pool))
+    finally:
+        pool.close()
+
+
 @main.command("digest")
 @click.option("--dry-run", is_flag=True, help="Render but do not send; writes out/preview.html")
 def digest(dry_run: bool):
     """Run the daily pipeline."""
     cfg = Config.from_env()
-    pool = _pool(cfg)
-    store = Store(pool)
     apify = ApifyClient(token=cfg.apify_token)
     llm = LLM(api_key=cfg.anthropic_api_key)
     since = datetime.now(timezone.utc) - timedelta(hours=24)
 
-    accounts = store.get_active_accounts()
+    # Phase 1: read accounts + voice corpus
+    accounts, voice = _with_store(cfg, lambda s: (s.get_active_accounts()[:MAX_ACCOUNTS], s.get_voice_samples(limit=200)))
     click.echo(f"fetching from {len(accounts)} accounts + {len(cfg.keywords)} keywords since {since.isoformat()}")
+
+    # Phase 2: Apify scrape (long-running, no DB held open)
     new_tweets: list = []
     if accounts:
-        new_tweets += apify.fetch_account_tweets(accounts, since=since)
+        new_tweets += apify.fetch_account_tweets(accounts, since=since, max_per_handle=MAX_PER_HANDLE)
     if cfg.keywords:
         new_tweets += apify.search_tweets(cfg.keywords, since=since)
-    inserted = store.upsert_tweets(new_tweets)
-    click.echo(f"upserted {inserted} new tweets (saw {len(new_tweets)})")
+    click.echo(f"apify returned {len(new_tweets)} tweets")
 
-    MAX_CANDIDATES = 200
-    candidates = store.get_recent_tweets(since=since)[:MAX_CANDIDATES]
-    click.echo(f"scoring {len(candidates)} candidates (capped at {MAX_CANDIDATES})")
+    # Phase 3: persist + read candidates (fresh pool)
+    candidates = _with_store(cfg, lambda s: (s.upsert_tweets(new_tweets), s.get_recent_tweets(since=since)[:MAX_CANDIDATES])[1])
+    click.echo(f"scoring {len(candidates)} candidates (cap {MAX_CANDIDATES})")
+
+    # Phase 4: score + select + draft (no DB)
     filt = Filter(llm=llm)
     scored = filt.score_tweets(candidates)
     chosen = filt.select(scored, weights=cfg.bucket_weights, total=cfg.daily_slots)
     click.echo(f"selected {len(chosen)}")
 
-    voice = store.get_voice_samples(limit=200)
     drafter = Drafter(llm=llm, voice_samples=voice)
     drafts = drafter.draft_many(chosen)
     angles = drafter.angles(chosen)
+    click.echo(f"drafted {len(drafts)}; {len(angles)} angles")
 
+    # Phase 5: render
     date_str = datetime.now(timezone.utc).date().isoformat()
     html = render_digest_html(drafts=drafts, angles=angles, date_str=date_str)
 
@@ -177,16 +194,21 @@ def digest(dry_run: bool):
         click.echo(f"dry run: wrote {out_path}")
         return
 
+    # Phase 6: send + record (fresh pool)
     sender = EmailSender(api_key=cfg.resend_api_key, recipient=cfg.recipient_email,
                          from_addr=os.getenv("FROM_ADDR", "Feed Warrior <onboarding@resend.dev>"))
-    digest_id = store.create_digest(status="sent")
-    from .store import DigestItem
-    store.add_digest_items([
-        DigestItem(digest_id=digest_id, tweet_id=d.scored.tweet.id, draft_text=d.draft_text,
-                   why_interesting=d.why_interesting, scores=d.scored.scores)
-        for d in drafts
-    ])
     sender.send(subject=f"Feed Warrior — {date_str} ({len(drafts)} drafts)", html=html)
+    from .store import DigestItem
+
+    def _record(s: Store):
+        digest_id = s.create_digest(status="sent")
+        s.add_digest_items([
+            DigestItem(digest_id=digest_id, tweet_id=d.scored.tweet.id, draft_text=d.draft_text,
+                       why_interesting=d.why_interesting, scores=d.scored.scores)
+            for d in drafts
+        ])
+        return digest_id
+    digest_id = _with_store(cfg, _record)
     click.echo(f"sent digest {digest_id}")
 
 
