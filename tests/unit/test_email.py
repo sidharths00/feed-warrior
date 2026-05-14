@@ -20,6 +20,30 @@ def test_intent_link_url_encodes():
     assert urllib.parse.unquote(link.split("text=", 1)[1]) == "hello world & friends"
 
 
+def test_intent_link_with_in_reply_to():
+    link = intent_link("my reply", in_reply_to="1234567890")
+    assert "in_reply_to=1234567890" in link
+    assert "text=my%20reply" in link
+
+
+def test_render_uses_in_reply_to_for_reply_mode():
+    html = render_digest_html(drafts=[_draft("a take")], angles=[], date_str="2026-05-11")
+    # _draft sets mode="reply" and tweet.id="1"
+    assert "in_reply_to=1" in html
+
+
+def test_render_quote_mode_appends_url_no_in_reply_to():
+    from feed_warrior.email import render_digest_html
+    t = Tweet(id="9", author_handle="x", text="src", url="https://x.com/x/status/9",
+              posted_at=datetime(2026, 5, 11, tzinfo=timezone.utc), source="list")
+    s = ScoredTweet(tweet=t, scores={"signal": 5, "work_adjacent": 5, "discourse": 0}, reason="")
+    quote = Draft(scored=s, draft_text="hot take", why_interesting="why", mode="quote")
+    html = render_digest_html(drafts=[quote], angles=[], date_str="2026-05-11")
+    assert "in_reply_to=" not in html
+    # Quote-mode appends the source URL to the draft text
+    assert "x.com%2Fx%2Fstatus%2F9" in html
+
+
 def test_render_digest_html_includes_drafts_and_links():
     html = render_digest_html(drafts=[_draft("draft text")], angles=["angle 1"], date_str="2026-05-11")
     assert "draft text" in html

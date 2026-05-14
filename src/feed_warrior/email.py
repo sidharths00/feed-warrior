@@ -15,13 +15,32 @@ _env = Environment(
 )
 
 
-def intent_link(text: str) -> str:
-    return f"https://twitter.com/intent/tweet?text={quote(text, safe='')}"
+def intent_link(text: str, in_reply_to: str | None = None) -> str:
+    """Build an X compose intent.
+
+    For replies, X expects ?in_reply_to=<numeric_tweet_id>. The user clicks the
+    link, X compose opens with the draft text pre-filled AND the reply context.
+    """
+    parts = [f"text={quote(text, safe='')}"]
+    if in_reply_to:
+        parts.append(f"in_reply_to={quote(in_reply_to, safe='')}")
+    return "https://twitter.com/intent/tweet?" + "&".join(parts)
+
+
+def post_link_for(draft: Draft) -> str:
+    """Choose the right X intent for this draft's mode."""
+    if draft.mode == "reply":
+        return intent_link(draft.draft_text, in_reply_to=draft.scored.tweet.id)
+    # quote mode: append source URL so X renders it as a quote-tweet
+    return intent_link(draft.draft_text + " " + draft.scored.tweet.url)
 
 
 def render_digest_html(drafts: list[Draft], angles: list[str], date_str: str) -> str:
     tmpl = _env.get_template("digest.html.j2")
-    return tmpl.render(drafts=drafts, angles=angles, date_str=date_str, intent_link=intent_link)
+    return tmpl.render(
+        drafts=drafts, angles=angles, date_str=date_str,
+        intent_link=intent_link, post_link_for=post_link_for,
+    )
 
 
 class EmailSender:

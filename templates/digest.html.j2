@@ -38,8 +38,8 @@
     <div class="source-text">{{ d.scored.tweet.text }}</div>
     <div class="draft">{{ d.draft_text }}</div>
     <div class="actions">
-      <a class="post" href="{{ intent_link(d.draft_text if d.mode == 'reply' else d.draft_text + ' ' + d.scored.tweet.url) }}">post this</a>
-      <a class="source-link" href="{{ d.scored.tweet.url }}">reply natively</a>
+      <a class="post" href="{{ post_link_for(d) }}">post this ({{ d.mode }})</a>
+      <a class="source-link" href="{{ d.scored.tweet.url }}">open on X</a>
     </div>
     <div class="why">why interesting: {{ d.why_interesting }}</div>
   </div>
