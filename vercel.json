@@ -5,7 +5,7 @@
   "functions": {
     "api/digest.py": {
       "runtime": "python3.13",
-      "maxDuration": 800,
+      "maxDuration": 300,
       "includeFiles": "{src/**,templates/**,migrations/**}"
     }
   }
