@@ -8,3 +8,5 @@ __pycache__/
 out/
 node_modules/
 .DS_Store
+.vercel
+.env*.local

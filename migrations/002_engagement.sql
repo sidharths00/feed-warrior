@@ -1,0 +1,4 @@
+ALTER TABLE tweets
+  ADD COLUMN IF NOT EXISTS view_count        INTEGER,
+  ADD COLUMN IF NOT EXISTS like_count        INTEGER,
+  ADD COLUMN IF NOT EXISTS author_followers  INTEGER;

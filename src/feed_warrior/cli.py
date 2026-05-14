@@ -136,6 +136,15 @@ def load_accounts(path: str):
 MAX_ACCOUNTS = 50
 MAX_PER_HANDLE = 5
 MAX_CANDIDATES = 100
+MIN_AUTHOR_FOLLOWERS = int(os.getenv("MIN_AUTHOR_FOLLOWERS", "2000"))
+MIN_VIEW_COUNT = int(os.getenv("MIN_VIEW_COUNT", "1000"))
+
+
+def _passes_quality(t) -> bool:
+    """Drop noise: tweet must come from a non-trivial account OR have real reach."""
+    followers = t.author_followers or 0
+    views = t.view_count or 0
+    return followers >= MIN_AUTHOR_FOLLOWERS or views >= MIN_VIEW_COUNT
 
 
 def _with_store(cfg: Config, fn):
@@ -168,9 +177,11 @@ def digest(dry_run: bool):
         new_tweets += apify.search_tweets(cfg.keywords, since=since)
     click.echo(f"apify returned {len(new_tweets)} tweets")
 
-    # Phase 3: persist + read candidates (fresh pool)
-    candidates = _with_store(cfg, lambda s: (s.upsert_tweets(new_tweets), s.get_recent_tweets(since=since)[:MAX_CANDIDATES])[1])
-    click.echo(f"scoring {len(candidates)} candidates (cap {MAX_CANDIDATES})")
+    # Phase 3: persist + read candidates, then quality-gate (fresh pool)
+    raw_candidates = _with_store(cfg, lambda s: (s.upsert_tweets(new_tweets), s.get_recent_tweets(since=since))[1])
+    candidates = [t for t in raw_candidates if _passes_quality(t)][:MAX_CANDIDATES]
+    click.echo(f"scoring {len(candidates)}/{len(raw_candidates)} candidates "
+               f"(quality gate: ≥{MIN_AUTHOR_FOLLOWERS} followers OR ≥{MIN_VIEW_COUNT} views; cap {MAX_CANDIDATES})")
 
     # Phase 4: score + select + draft (no DB)
     filt = Filter(llm=llm)

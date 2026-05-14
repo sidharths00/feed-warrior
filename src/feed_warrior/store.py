@@ -18,6 +18,9 @@ class Tweet:
     posted_at: datetime
     source: Literal["list", "search"]
     fetched_at: datetime | None = None
+    view_count: int | None = None
+    like_count: int | None = None
+    author_followers: int | None = None
 
 
 @dataclass
@@ -50,11 +53,16 @@ class Store:
 
     def upsert_tweets(self, tweets: Iterable[Tweet]) -> int:
         sql = """
-            INSERT INTO tweets (id, author_handle, text, url, posted_at, source)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            ON CONFLICT (id) DO NOTHING
+            INSERT INTO tweets (id, author_handle, text, url, posted_at, source,
+                                view_count, like_count, author_followers)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE SET
+                view_count       = COALESCE(EXCLUDED.view_count, tweets.view_count),
+                like_count       = COALESCE(EXCLUDED.like_count, tweets.like_count),
+                author_followers = COALESCE(EXCLUDED.author_followers, tweets.author_followers)
         """
-        rows = [(t.id, t.author_handle, t.text, t.url, t.posted_at, t.source) for t in tweets]
+        rows = [(t.id, t.author_handle, t.text, t.url, t.posted_at, t.source,
+                 t.view_count, t.like_count, t.author_followers) for t in tweets]
         if not rows:
             return 0
         with self.pool.connection() as conn:
@@ -65,7 +73,11 @@ class Store:
         return inserted
 
     def get_recent_tweets(self, since: datetime) -> list[Tweet]:
-        sql = "SELECT id, author_handle, text, url, posted_at, source, fetched_at FROM tweets WHERE posted_at >= %s ORDER BY posted_at DESC"
+        sql = """
+            SELECT id, author_handle, text, url, posted_at, source, fetched_at,
+                   view_count, like_count, author_followers
+            FROM tweets WHERE posted_at >= %s ORDER BY posted_at DESC
+        """
         with self.pool.connection() as conn:
             with conn.cursor(row_factory=class_row(Tweet)) as cur:
                 cur.execute(sql, (since,))

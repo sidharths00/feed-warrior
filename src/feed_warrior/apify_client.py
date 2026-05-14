@@ -75,13 +75,22 @@ class ApifyClient:
         out: list[Tweet] = []
         for it in raw:
             tid = str(it.get("id") or it.get("tweetId") or "")
-            author = (it.get("author") or {}).get("userName") or it.get("authorHandle") or ""
+            author_obj = it.get("author") or {}
+            author = author_obj.get("userName") or it.get("authorHandle") or ""
             text = it.get("text") or it.get("fullText") or ""
             url = it.get("url") or (f"https://x.com/{author}/status/{tid}" if author and tid else "")
             posted = _parse_dt(it.get("createdAt"))
             if not (tid and author and text and url and posted):
                 continue
-            out.append(Tweet(id=tid, author_handle=author, text=text, url=url, posted_at=posted, source=source))
+            view_count = it.get("viewCount")
+            like_count = it.get("likeCount")
+            author_followers = author_obj.get("followers") or author_obj.get("followers_count")
+            out.append(Tweet(
+                id=tid, author_handle=author, text=text, url=url, posted_at=posted, source=source,
+                view_count=int(view_count) if view_count is not None else None,
+                like_count=int(like_count) if like_count is not None else None,
+                author_followers=int(author_followers) if author_followers is not None else None,
+            ))
         return out
 
 
