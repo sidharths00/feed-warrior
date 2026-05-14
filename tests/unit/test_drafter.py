@@ -36,10 +36,40 @@ def test_draft_one_calls_llm_and_returns_draft():
 
 def test_draft_many_returns_one_per_input():
     llm = MagicMock()
-    llm.complete_json.return_value = {"draft_text": "x", "why_interesting": "y", "mode": "reply"}
+    # draft_many calls draft_and_refine_one for each item: 1 draft call + 1 refine call.
+    llm.complete_json.side_effect = lambda system, user, max_tokens=None: (
+        {"draft_text": "x", "why_interesting": "y", "mode": "reply"}
+        if "Source tweet" in user and "Tighten" not in user
+        else {"refined": "x-refined", "changed": True, "notes": "tightened"}
+    )
     d = Drafter(llm=llm, voice_samples=[])
     drafts = d.draft_many([_scored("1"), _scored("2"), _scored("3")])
     assert len(drafts) == 3
+    # All drafts went through refine
+    assert all(dr.draft_text == "x-refined" for dr in drafts)
+
+
+def test_refine_one_keeps_substance_swaps_text():
+    from feed_warrior.drafter import Draft as DraftCls
+    base = DraftCls(scored=_scored(), draft_text="the real signal here is X", why_interesting="why", mode="reply")
+    llm = MagicMock()
+    llm.complete_json.return_value = {"refined": "X. that's the signal.", "changed": True, "notes": "cut filler opener"}
+    d = Drafter(llm=llm, voice_samples=[])
+    refined = d.refine_one(base)
+    assert refined.draft_text == "X. that's the signal."
+    assert refined.why_interesting == "why"  # unchanged
+    assert refined.mode == "reply"           # unchanged
+    assert refined.scored is base.scored     # unchanged
+
+
+def test_refine_one_returns_original_on_llm_failure():
+    from feed_warrior.drafter import Draft as DraftCls
+    base = DraftCls(scored=_scored(), draft_text="original take", why_interesting="why", mode="reply")
+    llm = MagicMock()
+    llm.complete_json.side_effect = RuntimeError("boom")
+    d = Drafter(llm=llm, voice_samples=[])
+    refined = d.refine_one(base)
+    assert refined.draft_text == "original take"
 
 
 def test_angles_returns_list():

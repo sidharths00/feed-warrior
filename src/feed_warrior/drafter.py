@@ -47,6 +47,33 @@ _ANGLES_SYSTEM = """\
 You suggest 2-3 longer post angles for Sidharth (founder, MCP-Eval, AI evals at Box). Given today's interesting tweets, propose angle(s) for a longer thread or post. Each angle: 2-3 sentences describing the take, NOT pre-drafted as a tweet. Output STRICT JSON: a JSON array of strings.
 """
 
+_REFINE_SYSTEM_TEMPLATE = """\
+You are Sidharth's editor. You receive a draft tweet that's already in roughly his voice and a take he agrees with directionally. Your job is to tighten the COPY one notch — keep the substance, sharpen the language.
+
+Common edits to apply (only if they help):
+- Cut filler openers: "the real X is", "what's interesting is", "the thing here is", "the framing is" → say it directly.
+- Match Sidharth's lowercase rhythm where it sounds more natural (he often skips initial caps and avoids title-case).
+- Replace academic phrasings (nominalizations like "the integration capability", "the failure mode is") with verbs and concrete nouns.
+- Land the punchline. The last clause should hit hardest, not trail off.
+- Remove generic AI-blogger phrases ("at scale", "in production", "the real signal", "underrated") unless they earn their place.
+- Keep ≤270 chars. Aim shorter when possible.
+
+Voice samples (his actual writing — match this rhythm):
+
+{voice_block}
+
+Output STRICT JSON: {{"refined": "<the refined tweet>", "changed": true|false, "notes": "<one phrase, what changed or why unchanged>"}}
+
+If the draft is already tight, return changed=false with the original text.
+"""
+
+
+@dataclass
+class RefineResult:
+    refined: str
+    changed: bool
+    notes: str
+
 
 class Drafter:
     def __init__(self, llm: LLM, voice_samples: list[VoiceSample], voice_n: int = 12):
@@ -79,11 +106,40 @@ class Drafter:
             mode=out.get("mode", "reply"),
         )
 
+    def _refine_system(self) -> str:
+        sample = random.sample(self.voice_samples, min(self.voice_n, len(self.voice_samples))) if self.voice_samples else []
+        return _REFINE_SYSTEM_TEMPLATE.format(voice_block=self._voice_block(sample))
+
+    def refine_one(self, draft: Draft) -> Draft:
+        """Second-pass tighten: keep substance, sharpen the copy."""
+        user = (
+            f"Source tweet by @{draft.scored.tweet.author_handle}:\n"
+            f"\"{draft.scored.tweet.text}\"\n\n"
+            f"Current draft:\n{draft.draft_text}\n\n"
+            f"Tighten the copy."
+        )
+        try:
+            out = self.llm.complete_json(system=self._refine_system(), user=user, max_tokens=400)
+            refined = out.get("refined", "").strip()
+            if not refined:
+                return draft
+            return Draft(
+                scored=draft.scored,
+                draft_text=refined,
+                why_interesting=draft.why_interesting,
+                mode=draft.mode,
+            )
+        except Exception:
+            return draft
+
+    def draft_and_refine_one(self, item: ScoredTweet) -> Draft:
+        return self.refine_one(self.draft_one(item))
+
     def draft_many(self, items: list[ScoredTweet]) -> list[Draft]:
         if not items:
             return []
         with ThreadPoolExecutor(max_workers=DRAFT_CONCURRENCY) as pool:
-            return list(pool.map(self.draft_one, items))
+            return list(pool.map(self.draft_and_refine_one, items))
 
     def angles(self, items: list[ScoredTweet]) -> list[str]:
         if not items:
